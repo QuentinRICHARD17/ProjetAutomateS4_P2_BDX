@@ -5,6 +5,7 @@ class Automate:
     def __init__(self):
         self.alphabet = []
         self.nb_etats = 0
+        self.etats = []  # Nouvelle liste pour stocker les noms réels des états (ex: 0, 1, 2, 'P')
         self.initials = set()
         self.terminals = set()
         self.transitions = {}
@@ -19,64 +20,94 @@ class Automate:
             with open(nom_fichier, 'r') as f:
                 lignes = [l.strip() for l in f.readlines() if l.strip()]
 
+                # Fonction utilitaire pour lire un état (entier ou 'P')
+                def parse_etat(val):
+                    return 'P' if val == 'P' else int(val)
+
                 nb_symboles = int(lignes[0])
                 self.alphabet = [chr(97 + i) for i in range(nb_symboles)]
                 self.nb_etats = int(lignes[1])
 
-                # États initiaux
                 parts_init = lignes[2].split()
-                self.initials = set(map(int, parts_init[1:]))
+                self.initials = set(map(parse_etat, parts_init[1:]))
 
-                # États terminaux
                 parts_term = lignes[3].split()
-                self.terminals = set(map(int, parts_term[1:]))
-
-                # Initialisation des transitions (inclut 'e' pour epsilon)
-                self.transitions = {i: {s: set() for s in self.alphabet + ['e']} for i in range(self.nb_etats)}
+                self.terminals = set(map(parse_etat, parts_term[1:]))
 
                 nb_trans = int(lignes[4])
+                trans_data = []
+                has_poubelle = False
+
+                # Lecture préalable des transitions pour repérer 'P'
                 for i in range(5, 5 + nb_trans):
                     t = lignes[i]
-                    dep_str = ""
-                    idx = 0
-                    while idx < len(t) and t[idx].isdigit():
-                        dep_str += t[idx]
-                        idx += 1
-                    dep = int(dep_str)
+
+                    if t.startswith('P'):
+                        dep = 'P'
+                        idx = 1
+                    else:
+                        dep_str = ""
+                        idx = 0
+                        while idx < len(t) and t[idx].isdigit():
+                            dep_str += t[idx]
+                            idx += 1
+                        dep = int(dep_str)
+
                     sym = t[idx]
-                    arr = int(t[idx + 1:])
+
+                    arr_str = t[idx + 1:]
+                    arr = 'P' if arr_str == 'P' else int(arr_str)
+
+                    if dep == 'P' or arr == 'P':
+                        has_poubelle = True
+
+                    trans_data.append((dep, sym, arr))
+
+                # Construction de la liste des états
+                if has_poubelle:
+                    # 'P' remplace le dernier état numérique
+                    self.etats = list(range(self.nb_etats - 1)) + ['P']
+                else:
+                    self.etats = list(range(self.nb_etats))
+
+                # Initialisation des transitions
+                self.transitions = {i: {s: set() for s in self.alphabet + ['e']} for i in self.etats}
+
+                # Remplissage
+                for dep, sym, arr in trans_data:
                     self.transitions[dep][sym].add(arr)
+
             return True
         except Exception as e:
             print(f"Erreur de lecture : {e}")
             return False
 
     def afficher(self, titre="Automate"):
-        """Affichage sous forme de table [cite: 598, 604]"""
         print(f"\n--- {titre} ---")
         header = "État | " + " | ".join(f"  {s}  " for s in self.alphabet)
         print("-" * len(header))
         print(header)
         print("-" * len(header))
 
-        for i in range(self.nb_etats):
+        for i in self.etats:
             prefix = ""
             if i in self.initials: prefix += "E"
             if i in self.terminals: prefix += "S"
-            row = f"{prefix:2}{i:2} | "
+            # str(i) permet d'afficher 'P' proprement
+            row = f"{prefix:2}{str(i):2} | "
             cells = []
             for s in self.alphabet:
                 dest = self.transitions[i].get(s, set())
-                cells.append(",".join(map(str, sorted(list(dest)))) if dest else " - ")
+                cells.append(",".join(map(str, sorted(list(dest), key=str))) if dest else " - ")
             print(row + " | ".join(f"{c:5}" for c in cells))
         print("-" * len(header))
 
-    # --- DIAGNOSTICS [cite: 626, 632] ---
+    # --- DIAGNOSTICS ---
 
     def est_deterministe(self):
         if len(self.initials) != 1:
             return False, "Plusieurs états initiaux."
-        for i in range(self.nb_etats):
+        for i in self.etats:
             if self.transitions[i].get('e'): return False, "Contient des transitions epsilon."
             for s in self.alphabet:
                 if len(self.transitions[i].get(s, set())) > 1:
@@ -84,7 +115,7 @@ class Automate:
         return True, ""
 
     def est_complet(self):
-        for i in range(self.nb_etats):
+        for i in self.etats:
             for s in self.alphabet:
                 if not self.transitions[i].get(s, set()):
                     return False, f"Manque transition pour '{s}' à l'état {i}."
@@ -93,21 +124,28 @@ class Automate:
     def est_standard(self):
         if len(self.initials) != 1: return False, "Pas d'état initial unique."
         ini = list(self.initials)[0]
-        for i in range(self.nb_etats):
+        for i in self.etats:
             for s in self.alphabet:
                 if ini in self.transitions[i].get(s, set()):
                     return False, f"Une transition revient sur l'état initial {ini}."
         return True, ""
 
-    # --- TRANSFORMATIONS [cite: 611, 638, 648] ---
+    # --- TRANSFORMATIONS ---
 
     def standardiser(self):
-        n_ini = self.nb_etats
+        # On cherche un nom de nouvel état numérique qui n'existe pas encore
+        n_ini = 0
+        while n_ini in self.etats:
+            n_ini += 1
+
+        self.etats.append(n_ini)
         self.transitions[n_ini] = {s: set() for s in self.alphabet + ['e']}
+
         for i in self.initials:
             for s in self.alphabet:
                 self.transitions[n_ini][s].update(self.transitions[i][s])
             if i in self.terminals: self.terminals.add(n_ini)
+
         self.initials = {n_ini}
         self.nb_etats += 1
         print("Standardisation terminée.")
@@ -124,8 +162,7 @@ class Automate:
         return closure
 
     def determiniser_et_completer(self):
-        """Déterminisation et complétion automatique [cite: 621, 639, 644]"""
-        start_set = tuple(sorted(list(self.epsilon_closure(self.initials))))
+        start_set = tuple(sorted(list(self.epsilon_closure(self.initials)), key=str))
         states_map = {start_set: 0}
         queue = [start_set]
         new_trans = {}
@@ -136,20 +173,19 @@ class Automate:
             curr_tuple = queue[idx]
             new_trans[idx] = {s: set() for s in self.alphabet}
 
-            # Gestion des états terminaux
             if curr_tuple != ("P",) and any(s in self.terminals for s in curr_tuple):
                 new_terminals.add(idx)
 
             for s in self.alphabet:
                 if curr_tuple == ("P",):
-                    new_trans[idx][s].add(idx)  # La poubelle boucle sur elle-même
+                    new_trans[idx][s].add(idx)
                     continue
 
                 reach = set()
                 for sub in curr_tuple:
                     reach.update(self.transitions[sub].get(s, set()))
 
-                next_set = tuple(sorted(list(self.epsilon_closure(reach))))
+                next_set = tuple(sorted(list(self.epsilon_closure(reach)), key=str))
                 if not next_set:
                     next_set = ("P",)
 
@@ -165,17 +201,18 @@ class Automate:
             print(f"État {i} = {nom}")
 
         self.nb_etats = len(queue)
+        self.etats = list(range(self.nb_etats))  # Le nouvel automate AFD a des états 0..N
         self.initials = {0}
         self.terminals = new_terminals
         self.transitions = new_trans
 
     def minimiser(self):
-        """Algorithme de Moore [cite: 657-659]"""
         if not self.est_complet()[0]: self.determiniser_et_completer()
 
         groups = []
-        g_term = tuple(sorted(list(self.terminals)))
-        g_non_term = tuple(sorted([i for i in range(self.nb_etats) if i not in self.terminals]))
+        g_term = tuple(sorted(list(self.terminals), key=str))
+        g_non_term = tuple(sorted([i for i in self.etats if i not in self.terminals], key=str))
+
         if g_term: groups.append(g_term)
         if g_non_term: groups.append(g_non_term)
 
@@ -190,19 +227,18 @@ class Automate:
                     if sig not in new_groups_dict: new_groups_dict[sig] = []
                     new_groups_dict[sig].append(e)
 
-            next_groups = [tuple(sorted(v)) for v in new_groups_dict.values()]
-            next_groups.sort()
+            next_groups = [tuple(sorted(v, key=str)) for v in new_groups_dict.values()]
+            next_groups.sort(key=str)
             if len(next_groups) == len(groups): break
             groups = next_groups
             step += 1
         print("Minimisation terminée.")
 
     def complement(self):
-        """Langage complémentaire [cite: 697, 698]"""
         if not self.est_deterministe()[0] or not self.est_complet()[0]:
             print("L'automate doit être AFD et Complet.")
             return
-        self.terminals = {i for i in range(self.nb_etats) if i not in self.terminals}
+        self.terminals = {i for i in self.etats if i not in self.terminals}
         print("Automate complémentaire généré.")
 
 
@@ -219,7 +255,7 @@ def menu():
             std, msg = af.est_standard()
             print(f"Standard : {std} ({msg})")
             if not std and input("Standardiser ? (o/n) : ").lower() == 'o':
-                af.standardiser();
+                af.standardiser()
                 af.afficher("Standardisé")
 
             det, msg_det = af.est_deterministe()
@@ -233,11 +269,11 @@ def menu():
                 af.afficher("AFD Complet")
 
             if input("Minimiser ? (o/n) : ").lower() == 'o':
-                af.minimiser();
+                af.minimiser()
                 af.afficher("Minimal")
 
             if input("Complémentaire ? (o/n) : ").lower() == 'o':
-                af.complement();
+                af.complement()
                 af.afficher("Complémentaire")
 
             while True:
@@ -249,7 +285,8 @@ def menu():
                     if c in af.alphabet:
                         curr = list(af.transitions[curr][c])[0]
                     else:
-                        possible = False; break
+                        possible = False;
+                        break
                 print(f"Reconnu : {'OUI' if possible and curr in af.terminals else 'NON'}")
 
 
