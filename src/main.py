@@ -11,7 +11,7 @@ class Automate:
         self.transitions = {}
 
     def lire_fichier(self, num_automate):
-        nom_fichier = f"../data/{num_automate}.txt"
+        nom_fichier = f"../AutomatesTXT/{num_automate}.txt"
         if not os.path.exists(nom_fichier):
             print(f"Erreur : Le fichier {nom_fichier} est introuvable.")
             return False
@@ -245,7 +245,7 @@ class Automate:
 def menu():
     while True:
         print("\n" + "=" * 40)
-        choix = input("Numéro d'automate (1-44) ou 'q' : ")
+        choix = input("Numéro d'automate (01-44) ou 'q' : ")
         if choix.lower() == 'q': break
 
         af = Automate()
