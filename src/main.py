@@ -245,7 +245,7 @@ class Automate:
 def menu():
     while True:
         print("\n" + "=" * 40)
-        choix = input("Numéro d'automate (01-44) ou 'q' : ")
+        choix = input("Numéro d'automate (01-44) ou 'q' pour quitter : ")
         if choix.lower() == 'q': break
 
         af = Automate()
