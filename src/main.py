@@ -233,6 +233,35 @@ class Automate:
             groups = next_groups
             step += 1
         print("Minimisation terminée.")
+        # --- NOUVELLE PARTIE : RECONSTRUCTION ---
+        # 1. On crée un dictionnaire pour savoir dans quel nouveau groupe va chaque ancien état
+        etat_vers_groupe = {e: i for i, g in enumerate(groups) for e in g}
+
+        # 2. On met à jour les infos de base
+        self.nb_etats = len(groups)
+        self.etats = list(range(self.nb_etats))
+
+        # 3. On met à jour les initiaux et terminaux avec leurs nouveaux numéros
+        self.initials = {etat_vers_groupe[e] for e in self.initials}
+        self.terminals = {etat_vers_groupe[e] for e in self.terminals}
+
+        # 4. On reconstruit les transitions
+        nouvelles_transitions = {i: {s: set() for s in self.alphabet} for i in self.etats}
+
+        for i, groupe in enumerate(groups):
+            # On prend un état au hasard dans le groupe (le premier) car ils ont tous le même comportement
+            representant = groupe[0]
+            for s in self.alphabet:
+                ancienne_dest = list(self.transitions[representant][s])[0]
+                nouvelle_dest = etat_vers_groupe[ancienne_dest]
+                nouvelles_transitions[i][s].add(nouvelle_dest)
+
+        self.transitions = nouvelles_transitions
+
+        # Affichage pour montrer à l'examinateur la correspondance
+        print("\nCorrespondance des états minimisés :")
+        for i, g in enumerate(groups):
+            print(f"Nouvel état {i} = anciens états {{{'.'.join(map(str, g))}}}")
 
     def complement(self):
         if not self.est_deterministe()[0] or not self.est_complet()[0]:
